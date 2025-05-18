@@ -76,6 +76,10 @@ jobs:
       - name: Install go task
         run: sudo npm i -g @go-task/cli
 
+      - name: Install dependencies
+        working-directory: shadowbox
+        run: npm i
+
       - name: Run image build task
         working-directory: shadowbox
         run: task shadowbox:docker:build TARGET_ARCH=arm64 IMAGE_NAME=shadowbox VERSION=latest
