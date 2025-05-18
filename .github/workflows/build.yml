@@ -1,0 +1,88 @@
+name: 'Check updates and build'
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check:
+    name: Check updates
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION_UPDATED: ${{ steps.check.outputs.VERSION_UPDATED }}
+      VERSION: ${{ steps.check.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout files
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - id: check
+        name: Run check script
+        run: |
+          chmod +x check.sh
+          ./check.sh
+
+      - uses: actions-js/push@master
+        name: Commit & Push changes
+        if: steps.check.outputs.VERSION_UPDATED == 1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          message: "ci: shadowbox updated `${{ steps.check.outputs.VERSION }}`"
+
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    needs: check
+    if: needs.check.outputs.VERSION_UPDATED == 1
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout files
+        
+      - uses: actions/checkout@v4
+        name: Checkout shadowbox files
+        with:
+          repository: 'Jigsaw-Code/outline-server'
+          ref: "server-v${{ needs.check.outputs.VERSION }}"
+          path: shadowbox
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/hydrogen'
+        
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '^1.21'
+          
+      - name: Install go task
+        run: sudo npm i -g @go-task/cli
+
+      - name: Run image build task
+        run: task shadowbox:docker:build TARGET_ARCH=arm64 IMAGE_NAME=shadowbox VERSION=latest
+
+      - name: Push built docker image
+        run: |
+          docker tag shadowbox:latest ghcr.io/pmh-only/shadowbox:latest
+          docker tag shadowbox:latest ghcr.io/pmh-only/shadowbox:${{ needs.check.outputs.VERSION }}
+
+          docker push ghcr.io/pmh-only/shadowbox:latest
+          docker push ghcr.io/pmh-only/shadowbox:${{ needs.check.outputs.VERSION }}
