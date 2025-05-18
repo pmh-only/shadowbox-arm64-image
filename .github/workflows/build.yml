@@ -77,6 +77,7 @@ jobs:
         run: sudo npm i -g @go-task/cli
 
       - name: Run image build task
+        working-directory: shadowbox
         run: task shadowbox:docker:build TARGET_ARCH=arm64 IMAGE_NAME=shadowbox VERSION=latest
 
       - name: Push built docker image
